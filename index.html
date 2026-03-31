@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>그레이엄 S&P 500 스크리너</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans KR',sans-serif;background:#0f1117;color:#e8eaf0;font-size:14px}
+.top-bar{background:#151823;border-bottom:1px solid #2a2d3a;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.logo{font-size:18px;font-weight:600;color:#f5c842;letter-spacing:-0.3px}
+.logo span{color:#8b9ab5;font-weight:400;font-size:13px;margin-left:10px}
+.top-right{display:flex;align-items:center;gap:12px}
+.btn-export{background:#f5c842;color:#0f1117;border:none;padding:7px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer}
+.btn-export:hover{background:#e6b82e}
+.main{max-width:1600px;margin:0 auto;padding:20px 24px}
+.filters-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:20px}
+@media(max-width:1200px){.filters-grid{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:700px){.filters-grid{grid-template-columns:repeat(2,1fr)}}
+.fc{background:#151823;border:1.5px solid #2a2d3a;border-radius:10px;padding:10px 12px;cursor:pointer;transition:all 0.15s;user-select:none}
+.fc.on{border-color:#f5c842;background:#1d1f2a}
+.fc.off{opacity:0.45}
+.fc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+.fc-badge{font-size:10px;font-weight:600;color:#f5c842;background:#2a2510;padding:2px 6px;border-radius:4px}
+.sw{width:30px;height:17px;border-radius:9px;background:#2a2d3a;position:relative;transition:background 0.2s;flex-shrink:0}
+.sw.on{background:#f5c842}
+.sw::after{content:'';position:absolute;width:13px;height:13px;border-radius:50%;background:#fff;top:2px;left:2px;transition:transform 0.2s}
+.sw.on::after{transform:translateX(13px)}
+.fc-name{font-size:12px;font-weight:600;color:#e8eaf0;margin-bottom:2px}
+.fc-desc{font-size:10px;color:#8b9ab5;line-height:1.4}
+.stats-row{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:20px}
+.stat{background:#151823;border:1px solid #2a2d3a;border-radius:10px;padding:12px 16px;text-align:center}
+.stat-lbl{font-size:10px;color:#8b9ab5;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px}
+.stat-val{font-size:22px;font-weight:700;color:#e8eaf0}
+.stat-val.gold{color:#f5c842}
+.stat-val.green{color:#4caf82}
+.toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+.search{flex:1;min-width:200px;background:#151823;border:1px solid #2a2d3a;color:#e8eaf0;padding:8px 12px;border-radius:8px;font-size:13px;outline:none}
+.search:focus{border-color:#f5c84288}
+.search::placeholder{color:#8b9ab5}
+.sel{background:#151823;border:1px solid #2a2d3a;color:#e8eaf0;padding:8px 10px;border-radius:8px;font-size:12px;cursor:pointer;outline:none}
+.btn{background:#151823;border:1px solid #2a2d3a;color:#e8eaf0;padding:8px 14px;border-radius:8px;font-size:12px;cursor:pointer}
+.btn:hover{background:#1d2030;border-color:#3a3d4a}
+.btn.danger{color:#e24b4a;border-color:#3a2020}
+.count-info{font-size:12px;color:#8b9ab5;margin-left:auto;align-self:center}
+.tbl-wrap{border:1px solid #2a2d3a;border-radius:12px;overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 300px)}
+table{width:100%;border-collapse:collapse}
+thead th{background:#151823;padding:9px 10px;text-align:left;font-size:11px;font-weight:600;color:#8b9ab5;text-transform:uppercase;letter-spacing:0.4px;white-space:nowrap;border-bottom:1px solid #2a2d3a;cursor:pointer;position:sticky;top:0;z-index:10}
+thead th:hover{color:#e8eaf0}
+thead th .sort-arrow{display:inline;margin-left:3px;opacity:0.4}
+thead th.sorted .sort-arrow{opacity:1;color:#f5c842}
+tbody tr{border-bottom:0.5px solid #1e2130}
+tbody tr:hover{background:#1a1d2a}
+tbody tr.all-pass{background:#0f1d14}
+tbody tr.all-pass:hover{background:#142419}
+td{padding:8px 10px;white-space:nowrap}
+td.ticker{font-weight:700;font-size:13px;color:#5b9bd5}
+td.name{max-width:180px;overflow:hidden;text-overflow:ellipsis;color:#c8cad5}
+td.sector{font-size:11px;color:#8b9ab5}
+td.cap-v{font-size:12px;color:#c8cad5;text-align:right}
+.pass-badge{background:#0f1d14;color:#4caf82;border:1px solid #2a5c38;font-size:10px;font-weight:700;padding:2px 8px;border-radius:5px;display:inline-block}
+.fail-badge{background:#1d1014;color:#e24b4a;border:1px solid #5c2a2a;font-size:10px;font-weight:700;padding:2px 8px;border-radius:5px;display:inline-block}
+.cell-pass{color:#4caf82;font-weight:600}
+.cell-fail{color:#e24b4a}
+.cell-na{color:#3a3d4a}
+.cell-warn{color:#f5c842}
+.dots{display:flex;gap:3px;align-items:center}
+.dot{width:8px;height:8px;border-radius:50%}
+.d-pass{background:#4caf82}
+.d-fail{background:#e24b4a}
+.d-off{background:#2a2d3a}
+.num-pass{color:#4caf82}
+.num-fail{color:#e24b4a}
+.num-na{color:#3a3d4a}
+.legend{display:flex;gap:16px;font-size:11px;color:#8b9ab5;margin-bottom:12px;flex-wrap:wrap}
+.legend-item{display:flex;align-items:center;gap:4px}
+.legend-dot{width:8px;height:8px;border-radius:50%}
+.empty{padding:60px;text-align:center;color:#8b9ab5}
+.note{font-size:11px;color:#4a4d5a;margin-top:12px;line-height:1.6}
+@media print{
+  .top-bar{position:static}
+  thead th{position:static}
+  body{background:#fff;color:#000}
+  .top-bar,.btn-export,.toolbar{display:none}
+}
+
+.mode-toggle{display:flex;align-items:center;background:#0f1117;border:1px solid #2a2d3a;border-radius:8px;overflow:hidden}
+.mode-btn{padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;border:none;background:transparent;color:#8b9ab5;transition:all 0.15s;white-space:nowrap}
+.mode-btn.active-classic{background:#1a2535;color:#5b9bd5}
+.mode-btn.active-modern{background:#1a2520;color:#4caf82}
+.mode-divider{width:1px;background:#2a2d3a;height:100%}
+.mode-info{font-size:11px;color:#8b9ab5;padding:5px 10px;border-left:1px solid #2a2d3a;white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="top-bar">
+  <div>
+    <span class="logo">그레이엄 스크리너 <span>S&P 500 · 벤저민 그레이엄 7가지 기준</span></span>
+  </div>
+  <div class="top-right">
+    <div class="mode-toggle" id="mode-toggle">
+      <button class="mode-btn active-classic" id="btn-classic" onclick="setMode('classic')">
+        📐 클래식 기준
+      </button>
+      <div class="mode-divider"></div>
+      <button class="mode-btn" id="btn-modern" onclick="setMode('modern')">
+        🔄 현대적 기준
+      </button>
+      <span class="mode-info" id="mode-info">PER≤15 · PBR≤1.5</span>
+    </div>
+    <button class="btn-export" onclick="exportCSV()">CSV 내보내기</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="filters-grid" id="filters"></div>
+
+  <div class="stats-row">
+    <div class="stat"><div class="stat-lbl">전체 종목</div><div class="stat-val gold" id="s-total">-</div></div>
+    <div class="stat"><div class="stat-lbl">필터 통과</div><div class="stat-val green" id="s-pass">-</div></div>
+    <div class="stat"><div class="stat-lbl">통과율</div><div class="stat-val" id="s-rate">-</div></div>
+    <div class="stat"><div class="stat-lbl">활성 기준</div><div class="stat-val" id="s-active">-</div></div>
+    <div class="stat"><div class="stat-lbl">표시 종목</div><div class="stat-val" id="s-showing">-</div></div>
+  </div>
+
+  <div class="toolbar">
+    <input class="search" type="text" id="search" placeholder="티커 또는 기업명 검색...">
+    <select class="sel" id="sector-filter" onchange="renderTable()">
+      <option value="">전체 섹터</option>
+    </select>
+    <select class="sel" id="show-mode" onchange="renderTable()">
+      <option value="all">전체 표시</option>
+      <option value="pass">통과만</option>
+      <option value="fail">탈락만</option>
+    </select>
+    <button class="btn" onclick="resetAll()">초기화</button>
+    <button class="btn danger" onclick="allOff()">전체 OFF</button>
+    <button class="btn" onclick="allOn()">전체 ON</button>
+    <span class="count-info" id="count-info"></span>
+  </div>
+
+  <div class="legend">
+    <span class="legend-item"><span class="legend-dot" style="background:#4caf82"></span>통과</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#e24b4a"></span>미통과</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#2a2d3a"></span>기준 OFF</span>
+    <span style="margin-left:auto;font-size:10px" id="criteria-legend">클래식: PER≤15 · PBR≤1.5 · P×B≤22.5 | 2024년 연간 추정치 기준</span>
+  </div>
+
+  <div class="tbl-wrap">
+    <table id="main-table">
+      <thead>
+        <tr>
+          <th onclick="sortBy('t')" id="th-t"># <span class="sort-arrow">↕</span></th>
+          <th onclick="sortBy('t')" >티커</th>
+          <th onclick="sortBy('n')">기업명 <span class="sort-arrow">↕</span></th>
+          <th onclick="sortBy('s')">섹터 <span class="sort-arrow">↕</span></th>
+          <th onclick="sortBy('cap')" class="sorted">시가총액 <span class="sort-arrow">↓</span></th>
+          <th>결과</th>
+          <th>점수</th>
+          <th onclick="sortBy('per')">PER <span class="sort-arrow">↕</span></th>
+          <th onclick="sortBy('pbr')">PBR <span class="sort-arrow">↕</span></th>
+          <th title="충분한 기업 규모">①규모</th>
+          <th title="건전한 재무상태">②재무</th>
+          <th title="이익의 안정성">③이익</th>
+          <th title="배당의 지속성">④배당</th>
+          <th title="이익의 성장성">⑤성장</th>
+          <th title="적정 PER">⑥PER</th>
+          <th title="적정 PBR">⑦PBR</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div id="empty" class="empty" style="display:none">조건에 맞는 종목이 없습니다</div>
+  <p class="note">
+    * 본 데이터는 2024년 연간 공개 재무제표 기준 추정치이며, 투자 참고용입니다. 실제 투자 전 반드시 최신 재무제표를 확인하세요.<br>
+    * <span id="mode-note-label" style="color:#5b9bd5;font-weight:600">클래식 기준</span>: PER≤15, PBR≤1.5, PER×PBR≤22.5 &nbsp;|&nbsp; <span style="color:#4caf82;font-weight:600">현대적 기준</span>: PER≤20, PBR≤3.0, PER×PBR≤50<br>
+    * 그레이엄 기준 ⑦ PBR은 "PBR≤1.5 또는 PER×PBR≤22.5" 복합 조건으로 판단합니다.<br>
+    * 유틸리티·금융·부동산 업종은 재무비율 기준이 다르게 적용될 수 있습니다.
+  </p>
+</div>
+
+<script>
+const STOCKS = [
+  {t:"AAPL",n:"Apple",s:"IT",cap:3100,capStr:"$3.1T",per:29.4,pbr:45.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"MSFT",n:"Microsoft",s:"IT",cap:3000,capStr:"$3.0T",per:33.2,pbr:11.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"NVDA",n:"NVIDIA",s:"IT",cap:2900,capStr:"$2.9T",per:38.5,pbr:25.3,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"AMZN",n:"Amazon",s:"경기소비재",cap:2100,capStr:"$2.1T",per:40.1,pbr:8.1,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"GOOGL",n:"Alphabet A",s:"통신서비스",cap:2000,capStr:"$2.0T",per:20.4,pbr:5.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"GOOG",n:"Alphabet C",s:"통신서비스",cap:1980,capStr:"$2.0T",per:20.4,pbr:5.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"META",n:"Meta Platforms",s:"통신서비스",cap:1400,capStr:"$1.4T",per:23.8,pbr:6.9,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"BRK.B",n:"Berkshire Hathaway B",s:"금융",cap:990,capStr:"$990B",per:14.2,pbr:1.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"TSLA",n:"Tesla",s:"경기소비재",cap:800,capStr:"$800B",per:60.2,pbr:11.4,size:true,finance:true,earnings:false,dividend:false,growth:true},
+  {t:"LLY",n:"Eli Lilly",s:"헬스케어",cap:750,capStr:"$750B",per:55.4,pbr:45.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"WMT",n:"Walmart",s:"필수소비재",cap:702,capStr:"$702B",per:31.2,pbr:7.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"AVGO",n:"Broadcom",s:"IT",cap:700,capStr:"$700B",per:25.1,pbr:10.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"JPM",n:"JPMorgan Chase",s:"금융",cap:680,capStr:"$680B",per:11.8,pbr:1.9,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"V",n:"Visa",s:"금융",cap:650,capStr:"$650B",per:27.4,pbr:12.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"XOM",n:"ExxonMobil",s:"에너지",cap:484,capStr:"$484B",per:11.6,pbr:1.9,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"UNH",n:"UnitedHealth",s:"헬스케어",cap:430,capStr:"$430B",per:21.5,pbr:5.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"MA",n:"Mastercard",s:"금융",cap:420,capStr:"$420B",per:32.1,pbr:48.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"ORCL",n:"Oracle",s:"IT",cap:380,capStr:"$380B",per:29.8,pbr:999,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"JNJ",n:"Johnson & Johnson",s:"헬스케어",cap:380,capStr:"$380B",per:14.2,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"COST",n:"Costco",s:"필수소비재",cap:380,capStr:"$380B",per:48.4,pbr:12.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"PG",n:"Procter & Gamble",s:"필수소비재",cap:370,capStr:"$370B",per:23.1,pbr:7.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"HD",n:"Home Depot",s:"경기소비재",cap:356,capStr:"$356B",per:22.1,pbr:999,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"BAC",n:"Bank of America",s:"금융",cap:320,capStr:"$320B",per:12.4,pbr:1.1,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"ABBV",n:"AbbVie",s:"헬스케어",cap:318,capStr:"$318B",per:14.8,pbr:21.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"NFLX",n:"Netflix",s:"통신서비스",cap:292,capStr:"$292B",per:38.4,pbr:14.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"CRM",n:"Salesforce",s:"IT",cap:290,capStr:"$290B",per:45.2,pbr:4.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"CVX",n:"Chevron",s:"에너지",cap:268,capStr:"$268B",per:12.4,pbr:1.4,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"MRK",n:"Merck & Co.",s:"헬스케어",cap:262,capStr:"$262B",per:13.8,pbr:5.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"KO",n:"Coca-Cola",s:"필수소비재",cap:258,capStr:"$258B",per:21.5,pbr:9.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"WFC",n:"Wells Fargo",s:"금융",cap:232,capStr:"$232B",per:11.8,pbr:1.2,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"AMD",n:"AMD",s:"IT",cap:230,capStr:"$230B",per:45.8,pbr:3.9,size:true,finance:true,earnings:false,dividend:false,growth:true},
+  {t:"ACN",n:"Accenture",s:"IT",cap:220,capStr:"$220B",per:27.4,pbr:8.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"MCD",n:"McDonald's",s:"경기소비재",cap:218,capStr:"$218B",per:22.4,pbr:999,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"TMUS",n:"T-Mobile",s:"통신서비스",cap:218,capStr:"$218B",per:24.8,pbr:3.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"LIN",n:"Linde",s:"소재",cap:212,capStr:"$212B",per:28.4,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"PEP",n:"PepsiCo",s:"필수소비재",cap:210,capStr:"$210B",per:20.8,pbr:11.2,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"IBM",n:"IBM",s:"IT",cap:203,capStr:"$203B",per:14.1,pbr:6.2,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"ADBE",n:"Adobe",s:"IT",cap:200,capStr:"$200B",per:25.3,pbr:12.1,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"MS",n:"Morgan Stanley",s:"금융",cap:198,capStr:"$198B",per:14.8,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"TMO",n:"Thermo Fisher",s:"헬스케어",cap:198,capStr:"$198B",per:24.8,pbr:4.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"CSCO",n:"Cisco Systems",s:"IT",cap:195,capStr:"$195B",per:14.8,pbr:4.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"ABT",n:"Abbott Laboratories",s:"헬스케어",cap:195,capStr:"$195B",per:22.3,pbr:4.1,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"AXP",n:"American Express",s:"금융",cap:192,capStr:"$192B",per:18.9,pbr:5.1,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"GE",n:"GE Aerospace",s:"산업재",cap:192,capStr:"$192B",per:28.4,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"PM",n:"Philip Morris",s:"필수소비재",cap:188,capStr:"$188B",per:16.8,pbr:999,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"DIS",n:"Walt Disney",s:"통신서비스",cap:188,capStr:"$188B",per:38.4,pbr:2.4,size:true,finance:true,earnings:false,dividend:false,growth:false},
+  {t:"NOW",n:"ServiceNow",s:"IT",cap:185,capStr:"$185B",per:58.4,pbr:14.2,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"INTU",n:"Intuit",s:"IT",cap:178,capStr:"$178B",per:48.2,pbr:11.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"GS",n:"Goldman Sachs",s:"금융",cap:178,capStr:"$178B",per:12.4,pbr:1.6,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"DHR",n:"Danaher",s:"헬스케어",cap:175,capStr:"$175B",per:38.4,pbr:4.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"CAT",n:"Caterpillar",s:"산업재",cap:174,capStr:"$174B",per:16.8,pbr:8.9,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"QCOM",n:"Qualcomm",s:"IT",cap:170,capStr:"$170B",per:14.2,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"TXN",n:"Texas Instruments",s:"IT",cap:165,capStr:"$165B",per:25.8,pbr:8.9,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"VZ",n:"Verizon",s:"통신서비스",cap:163,capStr:"$163B",per:9.1,pbr:1.6,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"RTX",n:"RTX Corp",s:"산업재",cap:155,capStr:"$155B",per:14.8,pbr:2.1,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"ISRG",n:"Intuitive Surgical",s:"헬스케어",cap:152,capStr:"$152B",per:62.4,pbr:13.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"T",n:"AT&T",s:"통신서비스",cap:152,capStr:"$152B",per:10.5,pbr:1.1,size:true,finance:false,earnings:true,dividend:false,growth:false},
+  {t:"SPGI",n:"S&P Global",s:"금융",cap:148,capStr:"$148B",per:38.4,pbr:12.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"PFE",n:"Pfizer",s:"헬스케어",cap:148,capStr:"$148B",per:9.8,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"AMGN",n:"Amgen",s:"헬스케어",cap:148,capStr:"$148B",per:14.2,pbr:22.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"BKNG",n:"Booking Holdings",s:"경기소비재",cap:148,capStr:"$148B",per:22.4,pbr:12.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"NEE",n:"NextEra Energy",s:"유틸리티",cap:148,capStr:"$148B",per:18.4,pbr:2.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"BX",n:"Blackstone",s:"금융",cap:148,capStr:"$148B",per:24.8,pbr:8.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"AMAT",n:"Applied Materials",s:"IT",cap:145,capStr:"$145B",per:18.2,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"BLK",n:"BlackRock",s:"금융",cap:138,capStr:"$138B",per:21.4,pbr:3.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"UNP",n:"Union Pacific",s:"산업재",cap:138,capStr:"$138B",per:18.4,pbr:8.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"CMCSA",n:"Comcast",s:"통신서비스",cap:138,capStr:"$138B",per:9.8,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"LOW",n:"Lowe's",s:"경기소비재",cap:135,capStr:"$135B",per:14.9,pbr:999,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"C",n:"Citigroup",s:"금융",cap:128,capStr:"$128B",per:9.2,pbr:0.6,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"SYK",n:"Stryker",s:"헬스케어",cap:128,capStr:"$128B",per:22.4,pbr:4.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"HON",n:"Honeywell",s:"산업재",cap:128,capStr:"$128B",per:18.4,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"COP",n:"ConocoPhillips",s:"에너지",cap:128,capStr:"$128B",per:10.8,pbr:2.1,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"PANW",n:"Palo Alto Networks",s:"IT",cap:112,capStr:"$112B",per:78.4,pbr:17.2,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"SCHW",n:"Charles Schwab",s:"금융",cap:112,capStr:"$112B",per:18.4,pbr:2.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"BSX",n:"Boston Scientific",s:"헬스케어",cap:112,capStr:"$112B",per:48.4,pbr:5.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"TJX",n:"TJX Companies",s:"경기소비재",cap:112,capStr:"$112B",per:24.8,pbr:11.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"PLD",n:"Prologis",s:"부동산",cap:112,capStr:"$112B",per:28.4,pbr:2.4,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"VRTX",n:"Vertex Pharma",s:"헬스케어",cap:112,capStr:"$112B",per:24.8,pbr:6.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"MU",n:"Micron Technology",s:"IT",cap:108,capStr:"$108B",per:10.2,pbr:2.1,size:true,finance:true,earnings:false,dividend:false,growth:true},
+  {t:"LMT",n:"Lockheed Martin",s:"산업재",cap:108,capStr:"$108B",per:14.2,pbr:18.2,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"CB",n:"Chubb",s:"금융",cap:107,capStr:"$107B",per:11.8,pbr:1.5,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"MDT",n:"Medtronic",s:"헬스케어",cap:107,capStr:"$107B",per:14.5,pbr:2.4,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"DE",n:"John Deere",s:"산업재",cap:105,capStr:"$105B",per:13.1,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"LRCX",n:"Lam Research",s:"IT",cap:98,capStr:"$98B",per:22.1,pbr:8.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"GILD",n:"Gilead Sciences",s:"헬스케어",cap:98,capStr:"$98B",per:12.4,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"ADP",n:"ADP",s:"IT",cap:98,capStr:"$98B",per:28.4,pbr:12.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"MMC",n:"Marsh McLennan",s:"금융",cap:92,capStr:"$92B",per:24.8,pbr:6.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"CRWD",n:"CrowdStrike",s:"IT",cap:89,capStr:"$89B",per:185.2,pbr:25.4,size:true,finance:true,earnings:false,dividend:false,growth:true},
+  {t:"KLAC",n:"KLA Corp",s:"IT",cap:88,capStr:"$88B",per:22.4,pbr:14.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"BMY",n:"Bristol-Myers Squibb",s:"헬스케어",cap:88,capStr:"$88B",per:8.4,pbr:3.2,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"CI",n:"Cigna",s:"헬스케어",cap:88,capStr:"$88B",per:11.4,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"SBUX",n:"Starbucks",s:"경기소비재",cap:88,capStr:"$88B",per:22.8,pbr:999,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"UPS",n:"UPS",s:"산업재",cap:88,capStr:"$88B",per:14.8,pbr:6.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"AMT",n:"American Tower",s:"부동산",cap:88,capStr:"$88B",per:38.4,pbr:4.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"FISV",n:"Fiserv",s:"IT",cap:88,capStr:"$88B",per:24.8,pbr:5.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"KKR",n:"KKR & Co",s:"금융",cap:88,capStr:"$88B",per:22.4,pbr:4.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"INTC",n:"Intel",s:"IT",cap:85,capStr:"$85B",per:22.1,pbr:0.9,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"CME",n:"CME Group",s:"금융",cap:82,capStr:"$82B",per:22.4,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"REGN",n:"Regeneron",s:"헬스케어",cap:82,capStr:"$82B",per:14.8,pbr:3.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"SNPS",n:"Synopsys",s:"IT",cap:78,capStr:"$78B",per:45.8,pbr:8.9,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"MO",n:"Altria",s:"필수소비재",cap:78,capStr:"$78B",per:9.8,pbr:999,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"MDLZ",n:"Mondelez",s:"필수소비재",cap:78,capStr:"$78B",per:18.4,pbr:2.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"GD",n:"General Dynamics",s:"산업재",cap:78,capStr:"$78B",per:14.8,pbr:3.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"WM",n:"Waste Management",s:"산업재",cap:78,capStr:"$78B",per:28.4,pbr:9.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"SHW",n:"Sherwin-Williams",s:"소재",cap:78,capStr:"$78B",per:28.4,pbr:14.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"SO",n:"Southern Company",s:"유틸리티",cap:78,capStr:"$78B",per:16.8,pbr:2.2,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"ICE",n:"Intercontinental Exchange",s:"금융",cap:76,capStr:"$76B",per:26.8,pbr:3.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"CDNS",n:"Cadence Design",s:"IT",cap:74,capStr:"$74B",per:55.2,pbr:14.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"APH",n:"Amphenol",s:"IT",cap:72,capStr:"$72B",per:28.4,pbr:8.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"MCO",n:"Moody's",s:"금융",cap:72,capStr:"$72B",per:32.4,pbr:18.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"HCA",n:"HCA Healthcare",s:"헬스케어",cap:72,capStr:"$72B",per:12.4,pbr:999,size:true,finance:false,earnings:true,dividend:false,growth:true},
+  {t:"CMG",n:"Chipotle Mexican Grill",s:"경기소비재",cap:72,capStr:"$72B",per:52.4,pbr:14.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"BA",n:"Boeing",s:"산업재",cap:72,capStr:"$72B",per:999,pbr:999,size:true,finance:false,earnings:false,dividend:false,growth:false},
+  {t:"PH",n:"Parker Hannifin",s:"산업재",cap:72,capStr:"$72B",per:18.4,pbr:3.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"CTAS",n:"Cintas",s:"산업재",cap:72,capStr:"$72B",per:38.4,pbr:12.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"ATVI",n:"Activision Blizzard",s:"통신서비스",cap:72,capStr:"$72B",per:22.4,pbr:4.2,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"DUK",n:"Duke Energy",s:"유틸리티",cap:72,capStr:"$72B",per:16.4,pbr:1.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"EQIX",n:"Equinix",s:"부동산",cap:72,capStr:"$72B",per:52.4,pbr:3.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"USB",n:"US Bancorp",s:"금융",cap:68,capStr:"$68B",per:11.8,pbr:1.4,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"CVS",n:"CVS Health",s:"헬스케어",cap:68,capStr:"$68B",per:9.8,pbr:0.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"NKE",n:"Nike",s:"경기소비재",cap:68,capStr:"$68B",per:22.4,pbr:7.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"ABNB",n:"Airbnb",s:"경기소비재",cap:68,capStr:"$68B",per:22.4,pbr:7.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"MAR",n:"Marriott International",s:"경기소비재",cap:68,capStr:"$68B",per:22.8,pbr:78.4,size:true,finance:false,earnings:true,dividend:false,growth:true},
+  {t:"ITW",n:"Illinois Tool Works",s:"산업재",cap:68,capStr:"$68B",per:22.4,pbr:12.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"EOG",n:"EOG Resources",s:"에너지",cap:68,capStr:"$68B",per:10.4,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"PYPL",n:"PayPal",s:"IT",cap:68,capStr:"$68B",per:12.8,pbr:2.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"MCK",n:"McKesson",s:"헬스케어",cap:65,capStr:"$65B",per:14.8,pbr:999,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"NOC",n:"Northrop Grumman",s:"산업재",cap:64,capStr:"$64B",per:14.2,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"FDX",n:"FedEx",s:"산업재",cap:64,capStr:"$64B",per:12.4,pbr:2.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"APO",n:"Apollo Global Mgmt",s:"금융",cap:64,capStr:"$64B",per:14.8,pbr:3.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"PNC",n:"PNC Financial",s:"금융",cap:62,capStr:"$62B",per:12.8,pbr:1.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"AON",n:"Aon",s:"금융",cap:62,capStr:"$62B",per:22.4,pbr:8.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"MMM",n:"3M",s:"산업재",cap:62,capStr:"$62B",per:12.8,pbr:3.7,size:true,finance:false,earnings:false,dividend:true,growth:false},
+  {t:"ZTS",n:"Zoetis",s:"헬스케어",cap:62,capStr:"$62B",per:28.4,pbr:8.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"MRVL",n:"Marvell Technology",s:"IT",cap:58,capStr:"$58B",per:85.4,pbr:3.8,size:true,finance:true,earnings:false,dividend:false,growth:true},
+  {t:"BDX",n:"Becton Dickinson",s:"헬스케어",cap:58,capStr:"$58B",per:22.4,pbr:2.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"ORLY",n:"O'Reilly Automotive",s:"경기소비재",cap:58,capStr:"$58B",per:24.8,pbr:999,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"TDG",n:"TransDigm",s:"산업재",cap:58,capStr:"$58B",per:28.4,pbr:999,size:true,finance:false,earnings:true,dividend:false,growth:true},
+  {t:"SLB",n:"SLB (Schlumberger)",s:"에너지",cap:58,capStr:"$58B",per:14.8,pbr:2.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"MPC",n:"Marathon Petroleum",s:"에너지",cap:58,capStr:"$58B",per:7.8,pbr:2.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"PXD",n:"Pioneer Natural Resources",s:"에너지",cap:58,capStr:"$58B",per:10.4,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"ECL",n:"Ecolab",s:"소재",cap:58,capStr:"$58B",per:32.4,pbr:6.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"WELL",n:"Welltower",s:"부동산",cap:58,capStr:"$58B",per:48.4,pbr:2.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"WDAY",n:"Workday",s:"IT",cap:58,capStr:"$58B",per:42.4,pbr:7.8,size:true,finance:true,earnings:false,dividend:false,growth:true},
+  {t:"FTNT",n:"Fortinet",s:"IT",cap:56,capStr:"$56B",per:35.8,pbr:9.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"EMR",n:"Emerson Electric",s:"산업재",cap:56,capStr:"$56B",per:14.9,pbr:3.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"TRV",n:"Travelers Companies",s:"금융",cap:55,capStr:"$55B",per:10.9,pbr:1.6,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"CL",n:"Colgate-Palmolive",s:"필수소비재",cap:55,capStr:"$55B",per:26.4,pbr:28.5,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"TFC",n:"Truist Financial",s:"금융",cap:52,capStr:"$52B",per:12.4,pbr:1.0,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"HLT",n:"Hilton Worldwide",s:"경기소비재",cap:52,capStr:"$52B",per:24.8,pbr:999,size:true,finance:false,earnings:true,dividend:false,growth:true},
+  {t:"ROP",n:"Roper Technologies",s:"산업재",cap:52,capStr:"$52B",per:28.4,pbr:4.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"TT",n:"Trane Technologies",s:"산업재",cap:52,capStr:"$52B",per:28.4,pbr:8.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"RSG",n:"Republic Services",s:"산업재",cap:52,capStr:"$52B",per:24.8,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"CSX",n:"CSX Corp",s:"산업재",cap:52,capStr:"$52B",per:14.8,pbr:4.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"PSX",n:"Phillips 66",s:"에너지",cap:52,capStr:"$52B",per:8.8,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"WMB",n:"Williams Companies",s:"에너지",cap:52,capStr:"$52B",per:22.4,pbr:3.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"APD",n:"Air Products",s:"소재",cap:52,capStr:"$52B",per:22.4,pbr:3.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"FCX",n:"Freeport-McMoRan",s:"소재",cap:52,capStr:"$52B",per:12.4,pbr:2.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"PSA",n:"Public Storage",s:"부동산",cap:52,capStr:"$52B",per:22.4,pbr:5.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"AFL",n:"Aflac",s:"금융",cap:50,capStr:"$50B",per:9.8,pbr:1.3,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"NXPI",n:"NXP Semiconductors",s:"IT",cap:48,capStr:"$48B",per:16.8,pbr:3.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"MET",n:"MetLife",s:"금융",cap:48,capStr:"$48B",per:9.8,pbr:0.9,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"GM",n:"General Motors",s:"경기소비재",cap:48,capStr:"$48B",per:4.8,pbr:0.5,size:true,finance:true,earnings:true,dividend:false,growth:false},
+  {t:"AZO",n:"AutoZone",s:"경기소비재",cap:48,capStr:"$48B",per:18.8,pbr:999,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"CARR",n:"Carrier Global",s:"산업재",cap:48,capStr:"$48B",per:24.8,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"NSC",n:"Norfolk Southern",s:"산업재",cap:48,capStr:"$48B",per:14.8,pbr:4.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"OXY",n:"Occidental Petroleum",s:"에너지",cap:48,capStr:"$48B",per:12.8,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"CHTR",n:"Charter Communications",s:"통신서비스",cap:48,capStr:"$48B",per:14.8,pbr:999,size:true,finance:false,earnings:true,dividend:false,growth:true},
+  {t:"SPG",n:"Simon Property Group",s:"부동산",cap:48,capStr:"$48B",per:14.8,pbr:7.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"AIG",n:"AIG",s:"금융",cap:45,capStr:"$45B",per:10.2,pbr:0.9,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"SNOW",n:"Snowflake",s:"IT",cap:45,capStr:"$45B",per:188.4,pbr:8.4,size:true,finance:true,earnings:false,dividend:false,growth:false},
+  {t:"BK",n:"Bank of New York Mellon",s:"금융",cap:44,capStr:"$44B",per:11.8,pbr:1.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"ABC",n:"AmerisourceBergen",s:"헬스케어",cap:44,capStr:"$44B",per:14.2,pbr:999,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"VLO",n:"Valero Energy",s:"에너지",cap:44,capStr:"$44B",per:6.8,pbr:1.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"TEAM",n:"Atlassian",s:"IT",cap:44,capStr:"$44B",per:78.4,pbr:12.8,size:true,finance:true,earnings:false,dividend:false,growth:true},
+  {t:"PRU",n:"Prudential Financial",s:"금융",cap:42,capStr:"$42B",per:8.4,pbr:0.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"ALL",n:"Allstate",s:"금융",cap:42,capStr:"$42B",per:10.8,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"AEP",n:"American Electric Power",s:"유틸리티",cap:42,capStr:"$42B",per:15.8,pbr:1.6,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"SRE",n:"Sempra",s:"유틸리티",cap:42,capStr:"$42B",per:16.4,pbr:2.2,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"DLR",n:"Digital Realty",s:"부동산",cap:42,capStr:"$42B",per:42.4,pbr:2.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"O",n:"Realty Income",s:"부동산",cap:42,capStr:"$42B",per:14.8,pbr:1.4,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"DHI",n:"D.R. Horton",s:"경기소비재",cap:40,capStr:"$40B",per:8.4,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"TEL",n:"TE Connectivity",s:"IT",cap:38,capStr:"$38B",per:16.8,pbr:2.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"AMP",n:"Ameriprise Financial",s:"금융",cap:38,capStr:"$38B",per:14.8,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"EW",n:"Edwards Lifesciences",s:"헬스케어",cap:38,capStr:"$38B",per:28.4,pbr:7.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"IDXX",n:"IDEXX Laboratories",s:"헬스케어",cap:38,capStr:"$38B",per:42.4,pbr:18.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"KR",n:"Kroger",s:"필수소비재",cap:38,capStr:"$38B",per:12.4,pbr:2.4,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"F",n:"Ford Motor",s:"경기소비재",cap:38,capStr:"$38B",per:6.8,pbr:0.8,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"ROST",n:"Ross Stores",s:"경기소비재",cap:38,capStr:"$38B",per:22.4,pbr:9.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"LEN",n:"Lennar",s:"경기소비재",cap:38,capStr:"$38B",per:8.8,pbr:1.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"IR",n:"Ingersoll Rand",s:"산업재",cap:38,capStr:"$38B",per:24.8,pbr:3.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"AME",n:"Ametek",s:"산업재",cap:38,capStr:"$38B",per:24.8,pbr:4.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"OTIS",n:"Otis Worldwide",s:"산업재",cap:38,capStr:"$38B",per:22.4,pbr:999,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"HES",n:"Hess",s:"에너지",cap:38,capStr:"$38B",per:14.8,pbr:2.4,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"OKE",n:"ONEOK",s:"에너지",cap:38,capStr:"$38B",per:18.4,pbr:3.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"LNG",n:"Cheniere Energy",s:"에너지",cap:38,capStr:"$38B",per:14.8,pbr:5.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"NEM",n:"Newmont",s:"소재",cap:38,capStr:"$38B",per:22.4,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"D",n:"Dominion Energy",s:"유틸리티",cap:38,capStr:"$38B",per:16.8,pbr:1.8,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"EXC",n:"Exelon",s:"유틸리티",cap:38,capStr:"$38B",per:14.8,pbr:1.2,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"CCI",n:"Crown Castle",s:"부동산",cap:38,capStr:"$38B",per:28.4,pbr:3.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"FIS",n:"Fidelity National",s:"IT",cap:38,capStr:"$38B",per:12.4,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"BIIB",n:"Biogen",s:"헬스케어",cap:38,capStr:"$38B",per:14.2,pbr:3.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"ARES",n:"Ares Management",s:"금융",cap:38,capStr:"$38B",per:32.4,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"LULU",n:"lululemon",s:"경기소비재",cap:38,capStr:"$38B",per:24.8,pbr:9.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"CTSH",n:"Cognizant",s:"IT",cap:36,capStr:"$36B",per:14.8,pbr:2.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"LVS",n:"Las Vegas Sands",s:"경기소비재",cap:36,capStr:"$36B",per:28.4,pbr:11.8,size:true,finance:false,earnings:false,dividend:false,growth:false},
+  {t:"GLW",n:"Corning",s:"IT",cap:35,capStr:"$35B",per:25.4,pbr:2.1,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"SYY",n:"Sysco",s:"필수소비재",cap:35,capStr:"$35B",per:14.5,pbr:18.9,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"IQV",n:"IQVIA",s:"헬스케어",cap:34,capStr:"$34B",per:22.8,pbr:4.8,size:true,finance:false,earnings:true,dividend:false,growth:true},
+  {t:"CNC",n:"Centene",s:"헬스케어",cap:34,capStr:"$34B",per:9.8,pbr:1.2,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"GIS",n:"General Mills",s:"필수소비재",cap:34,capStr:"$34B",per:13.9,pbr:4.1,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"STZ",n:"Constellation Brands",s:"필수소비재",cap:34,capStr:"$34B",per:18.4,pbr:4.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"PCG",n:"PG&E",s:"유틸리티",cap:34,capStr:"$34B",per:12.8,pbr:1.4,size:true,finance:false,earnings:false,dividend:false,growth:false},
+  {t:"SQ",n:"Block Inc",s:"IT",cap:34,capStr:"$34B",per:28.4,pbr:3.4,size:true,finance:true,earnings:false,dividend:false,growth:true},
+  {t:"HPQ",n:"HP Inc",s:"IT",cap:33,capStr:"$33B",per:9.8,pbr:999,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"HIG",n:"Hartford Financial",s:"금융",cap:32,capStr:"$32B",per:10.4,pbr:1.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"RMD",n:"ResMed",s:"헬스케어",cap:32,capStr:"$32B",per:28.8,pbr:7.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"YUM",n:"Yum! Brands",s:"경기소비재",cap:32,capStr:"$32B",per:22.4,pbr:999,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"FAST",n:"Fastenal",s:"산업재",cap:32,capStr:"$32B",per:32.4,pbr:12.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"VRSK",n:"Verisk Analytics",s:"산업재",cap:32,capStr:"$32B",per:28.4,pbr:12.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"NUE",n:"Nucor",s:"소재",cap:32,capStr:"$32B",per:11.4,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"NDAQ",n:"Nasdaq Inc",s:"IT",cap:32,capStr:"$32B",per:22.4,pbr:4.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"IT",n:"Gartner",s:"IT",cap:30,capStr:"$30B",per:38.4,pbr:14.2,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"HUM",n:"Humana",s:"헬스케어",cap:28,capStr:"$28B",per:18.4,pbr:3.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"A",n:"Agilent Technologies",s:"헬스케어",cap:28,capStr:"$28B",per:22.8,pbr:4.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"K",n:"Kellanova",s:"필수소비재",cap:28,capStr:"$28B",per:18.4,pbr:5.8,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"EL",n:"Estee Lauder",s:"필수소비재",cap:28,capStr:"$28B",per:32.4,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"ADM",n:"Archer-Daniels-Midland",s:"필수소비재",cap:28,capStr:"$28B",per:10.8,pbr:1.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"GWW",n:"W.W. Grainger",s:"산업재",cap:28,capStr:"$28B",per:18.4,pbr:12.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"BKR",n:"Baker Hughes",s:"에너지",cap:28,capStr:"$28B",per:14.8,pbr:2.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"FANG",n:"Diamondback Energy",s:"에너지",cap:28,capStr:"$28B",per:9.8,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"DOW",n:"Dow Inc",s:"소재",cap:28,capStr:"$28B",per:10.4,pbr:1.6,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"PPG",n:"PPG Industries",s:"소재",cap:28,capStr:"$28B",per:16.8,pbr:3.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"VMC",n:"Vulcan Materials",s:"소재",cap:28,capStr:"$28B",per:28.4,pbr:4.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"EA",n:"Electronic Arts",s:"통신서비스",cap:28,capStr:"$28B",per:22.4,pbr:3.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"XEL",n:"Xcel Energy",s:"유틸리티",cap:28,capStr:"$28B",per:14.8,pbr:1.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"VICI",n:"VICI Properties",s:"부동산",cap:28,capStr:"$28B",per:12.4,pbr:1.4,size:true,finance:false,earnings:true,dividend:false,growth:true},
+  {t:"ANSS",n:"ANSYS",s:"IT",cap:28,capStr:"$28B",per:38.4,pbr:8.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"ZS",n:"Zscaler",s:"IT",cap:28,capStr:"$28B",per:188.4,pbr:15.8,size:true,finance:true,earnings:false,dividend:false,growth:true},
+  {t:"DDOG",n:"Datadog",s:"IT",cap:28,capStr:"$28B",per:72.4,pbr:12.8,size:true,finance:true,earnings:false,dividend:false,growth:true},
+  {t:"NET",n:"Cloudflare",s:"IT",cap:28,capStr:"$28B",per:188.4,pbr:18.4,size:true,finance:true,earnings:false,dividend:false,growth:true},
+  {t:"DXCM",n:"Dexcom",s:"헬스케어",cap:28,capStr:"$28B",per:48.4,pbr:11.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"GRMN",n:"Garmin",s:"경기소비재",cap:28,capStr:"$28B",per:22.4,pbr:4.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"HPE",n:"Hewlett Packard Ent",s:"IT",cap:26,capStr:"$26B",per:12.4,pbr:1.2,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"ROK",n:"Rockwell Automation",s:"산업재",cap:26,capStr:"$26B",per:28.4,pbr:6.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"HAL",n:"Halliburton",s:"에너지",cap:26,capStr:"$26B",per:12.4,pbr:3.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"AVB",n:"AvalonBay Communities",s:"부동산",cap:26,capStr:"$26B",per:22.4,pbr:2.4,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"WTW",n:"Willis Towers Watson",s:"금융",cap:26,capStr:"$26B",per:18.4,pbr:2.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"MPWR",n:"Monolithic Power",s:"IT",cap:25,capStr:"$25B",per:55.8,pbr:11.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"ON",n:"ON Semiconductor",s:"IT",cap:24,capStr:"$24B",per:15.2,pbr:2.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"NTAP",n:"NetApp",s:"IT",cap:24,capStr:"$24B",per:18.2,pbr:12.4,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"MTB",n:"M&T Bank",s:"금융",cap:24,capStr:"$24B",per:10.8,pbr:1.1,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"RJF",n:"Raymond James",s:"금융",cap:24,capStr:"$24B",per:14.2,pbr:2.1,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"DOV",n:"Dover Corp",s:"산업재",cap:24,capStr:"$24B",per:18.4,pbr:3.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"FTV",n:"Fortive",s:"산업재",cap:24,capStr:"$24B",per:22.4,pbr:3.2,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"MLM",n:"Martin Marietta",s:"소재",cap:24,capStr:"$24B",per:22.4,pbr:4.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"STX",n:"Seagate Technology",s:"IT",cap:22,capStr:"$22B",per:18.4,pbr:6.8,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"BR",n:"Broadridge Financial",s:"IT",cap:22,capStr:"$22B",per:28.4,pbr:12.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"STT",n:"State Street",s:"금융",cap:22,capStr:"$22B",per:10.8,pbr:1.1,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"WRB",n:"W.R. Berkley",s:"금융",cap:22,capStr:"$22B",per:14.8,pbr:2.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"ZBH",n:"Zimmer Biomet",s:"헬스케어",cap:22,capStr:"$22B",per:14.8,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"CAH",n:"Cardinal Health",s:"헬스케어",cap:22,capStr:"$22B",per:9.8,pbr:5.4,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"MTD",n:"Mettler-Toledo",s:"헬스케어",cap:22,capStr:"$22B",per:26.4,pbr:12.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"CHD",n:"Church & Dwight",s:"필수소비재",cap:22,capStr:"$22B",per:28.4,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"NVR",n:"NVR Inc",s:"경기소비재",cap:22,capStr:"$22B",per:16.8,pbr:5.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"EFX",n:"Equifax",s:"산업재",cap:22,capStr:"$22B",per:32.4,pbr:6.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"WAB",n:"Westinghouse Air Brake",s:"산업재",cap:22,capStr:"$22B",per:18.4,pbr:2.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"DVN",n:"Devon Energy",s:"에너지",cap:22,capStr:"$22B",per:7.8,pbr:1.4,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"LYB",n:"LyondellBasell",s:"소재",cap:22,capStr:"$22B",per:7.8,pbr:1.4,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"TTWO",n:"Take-Two Interactive",s:"통신서비스",cap:22,capStr:"$22B",per:999,pbr:5.8,size:true,finance:true,earnings:false,dividend:false,growth:false},
+  {t:"FOXA",n:"Fox Corp A",s:"통신서비스",cap:22,capStr:"$22B",per:14.8,pbr:2.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"WEC",n:"WEC Energy",s:"유틸리티",cap:22,capStr:"$22B",per:16.8,pbr:1.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"AWK",n:"American Water Works",s:"유틸리티",cap:22,capStr:"$22B",per:22.4,pbr:3.4,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"EQR",n:"Equity Residential",s:"부동산",cap:22,capStr:"$22B",per:22.4,pbr:2.4,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"GPN",n:"Global Payments",s:"IT",cap:22,capStr:"$22B",per:12.4,pbr:1.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"ERIE",n:"Erie Indemnity",s:"금융",cap:22,capStr:"$22B",per:22.4,pbr:8.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"TROW",n:"T. Rowe Price",s:"금융",cap:22,capStr:"$22B",per:12.4,pbr:2.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"PWR",n:"Quanta Services",s:"산업재",cap:22,capStr:"$22B",per:24.8,pbr:3.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"SBAC",n:"SBA Communications",s:"부동산",cap:22,capStr:"$22B",per:28.4,pbr:999,size:true,finance:false,earnings:true,dividend:false,growth:true},
+  {t:"EXR",n:"Extra Space Storage",s:"부동산",cap:22,capStr:"$22B",per:22.4,pbr:3.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"FITB",n:"Fifth Third Bancorp",s:"금융",cap:21,capStr:"$21B",per:10.4,pbr:1.2,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"WDC",n:"Western Digital",s:"IT",cap:20,capStr:"$20B",per:18.8,pbr:1.8,size:true,finance:false,earnings:false,dividend:false,growth:false},
+  {t:"CINF",n:"Cincinnati Financial",s:"금융",cap:20,capStr:"$20B",per:12.6,pbr:1.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"CLX",n:"Clorox",s:"필수소비재",cap:19,capStr:"$19B",per:39.2,pbr:999,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"FSLR",n:"First Solar",s:"IT",cap:18,capStr:"$18B",per:15.4,pbr:2.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"KEYS",n:"Keysight Technologies",s:"IT",cap:18,capStr:"$18B",per:22.4,pbr:4.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"TDY",n:"Teledyne Technologies",s:"IT",cap:18,capStr:"$18B",per:19.8,pbr:2.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"RF",n:"Regions Financial",s:"금융",cap:18,capStr:"$18B",per:9.8,pbr:1.0,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"WAT",n:"Waters Corp",s:"헬스케어",cap:18,capStr:"$18B",per:22.4,pbr:6.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"MKC",n:"McCormick",s:"필수소비재",cap:18,capStr:"$18B",per:26.4,pbr:5.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"TSN",n:"Tyson Foods",s:"필수소비재",cap:18,capStr:"$18B",per:9.2,pbr:0.8,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"DG",n:"Dollar General",s:"경기소비재",cap:18,capStr:"$18B",per:9.8,pbr:2.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"DLTR",n:"Dollar Tree",s:"경기소비재",cap:18,capStr:"$18B",per:12.4,pbr:2.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"PHM",n:"PulteGroup",s:"경기소비재",cap:18,capStr:"$18B",per:8.4,pbr:1.6,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"EXPE",n:"Expedia",s:"경기소비재",cap:18,capStr:"$18B",per:14.8,pbr:5.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"GPC",n:"Genuine Parts",s:"산업재",cap:18,capStr:"$18B",per:16.8,pbr:3.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"LDOS",n:"Leidos Holdings",s:"산업재",cap:18,capStr:"$18B",per:14.8,pbr:3.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"L3H",n:"L3Harris Technologies",s:"산업재",cap:18,capStr:"$18B",per:14.2,pbr:2.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"KMI",n:"Kinder Morgan",s:"에너지",cap:18,capStr:"$18B",per:14.8,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"TRGP",n:"Targa Resources",s:"에너지",cap:18,capStr:"$18B",per:28.4,pbr:4.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"STLD",n:"Steel Dynamics",s:"소재",cap:18,capStr:"$18B",per:8.8,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"OMC",n:"Omnicom",s:"통신서비스",cap:18,capStr:"$18B",per:9.8,pbr:2.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"WBD",n:"Warner Bros Discovery",s:"통신서비스",cap:18,capStr:"$18B",per:999,pbr:0.6,size:true,finance:false,earnings:false,dividend:false,growth:false},
+  {t:"PPL",n:"PPL Corp",s:"유틸리티",cap:18,capStr:"$18B",per:14.8,pbr:1.4,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"CNP",n:"CenterPoint Energy",s:"유틸리티",cap:18,capStr:"$18B",per:14.8,pbr:1.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"ETR",n:"Entergy",s:"유틸리티",cap:18,capStr:"$18B",per:14.8,pbr:1.6,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"DTE",n:"DTE Energy",s:"유틸리티",cap:18,capStr:"$18B",per:16.4,pbr:2.2,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"INVH",n:"Invitation Homes",s:"부동산",cap:18,capStr:"$18B",per:22.4,pbr:2.4,size:true,finance:false,earnings:true,dividend:false,growth:true},
+  {t:"VRSN",n:"VeriSign",s:"IT",cap:18,capStr:"$18B",per:22.4,pbr:999,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"MDB",n:"MongoDB",s:"IT",cap:18,capStr:"$18B",per:85.4,pbr:11.4,size:true,finance:true,earnings:false,dividend:false,growth:true},
+  {t:"MANH",n:"Manhattan Associates",s:"IT",cap:18,capStr:"$18B",per:52.4,pbr:28.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"MRNA",n:"Moderna",s:"헬스케어",cap:18,capStr:"$18B",per:12.4,pbr:1.8,size:true,finance:true,earnings:false,dividend:false,growth:false},
+  {t:"MKL",n:"Markel Group",s:"금융",cap:18,capStr:"$18B",per:18.4,pbr:1.6,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"PFG",n:"Principal Financial",s:"금융",cap:18,capStr:"$18B",per:9.8,pbr:1.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"LPLA",n:"LPL Financial",s:"금융",cap:18,capStr:"$18B",per:18.4,pbr:4.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"OWL",n:"Blue Owl Capital",s:"금융",cap:18,capStr:"$18B",per:28.4,pbr:3.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"DECK",n:"Deckers Outdoor",s:"경기소비재",cap:18,capStr:"$18B",per:18.4,pbr:8.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"IRM",n:"Iron Mountain",s:"부동산",cap:18,capStr:"$18B",per:22.4,pbr:7.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"LHX",n:"L3Harris Technologies",s:"산업재",cap:17,capStr:"$17B",per:14.2,pbr:2.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"CFG",n:"Citizens Financial",s:"금융",cap:16,capStr:"$16B",per:9.2,pbr:0.8,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"DPZ",n:"Domino's Pizza",s:"경기소비재",cap:16,capStr:"$16B",per:26.4,pbr:999,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"IEX",n:"IDEX Corp",s:"산업재",cap:16,capStr:"$16B",per:22.4,pbr:4.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"XYL",n:"Xylem",s:"산업재",cap:16,capStr:"$16B",per:28.4,pbr:3.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"CTRA",n:"Coterra Energy",s:"에너지",cap:16,capStr:"$16B",per:9.8,pbr:1.2,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"ES",n:"Eversource Energy",s:"유틸리티",cap:16,capStr:"$16B",per:14.8,pbr:1.2,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"CMS",n:"CMS Energy",s:"유틸리티",cap:16,capStr:"$16B",per:16.8,pbr:2.4,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"AEE",n:"Ameren",s:"유틸리티",cap:16,capStr:"$16B",per:16.4,pbr:1.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"TYL",n:"Tyler Technologies",s:"IT",cap:16,capStr:"$16B",per:48.4,pbr:5.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"RE",n:"Everest Group",s:"금융",cap:16,capStr:"$16B",per:8.8,pbr:1.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"ZBRA",n:"Zebra Technologies",s:"IT",cap:15,capStr:"$15B",per:22.4,pbr:5.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"KEY",n:"KeyCorp",s:"금융",cap:15,capStr:"$15B",per:10.4,pbr:0.9,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"LH",n:"Labcorp",s:"헬스케어",cap:15,capStr:"$15B",per:14.8,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"ALGN",n:"Align Technology",s:"헬스케어",cap:15,capStr:"$15B",per:32.4,pbr:5.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"JBHT",n:"J.B. Hunt Transport",s:"산업재",cap:15,capStr:"$15B",per:16.8,pbr:4.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"AKAM",n:"Akamai Technologies",s:"IT",cap:14,capStr:"$14B",per:18.8,pbr:3.4,size:true,finance:true,earnings:true,dividend:false,growth:false},
+  {t:"HBAN",n:"Huntington Bancshares",s:"금융",cap:14,capStr:"$14B",per:9.8,pbr:1.0,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"DGX",n:"Quest Diagnostics",s:"헬스케어",cap:14,capStr:"$14B",per:14.2,pbr:2.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"HOLX",n:"Hologic",s:"헬스케어",cap:14,capStr:"$14B",per:12.8,pbr:2.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"HRL",n:"Hormel Foods",s:"필수소비재",cap:14,capStr:"$14B",per:14.8,pbr:2.4,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"CAG",n:"Conagra Brands",s:"필수소비재",cap:14,capStr:"$14B",per:9.8,pbr:1.4,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"BBY",n:"Best Buy",s:"경기소비재",cap:14,capStr:"$14B",per:9.8,pbr:5.4,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"TRU",n:"TransUnion",s:"산업재",cap:14,capStr:"$14B",per:22.4,pbr:3.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"SNA",n:"Snap-on",s:"산업재",cap:14,capStr:"$14B",per:14.2,pbr:2.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"EXPD",n:"Expeditors Int'l",s:"산업재",cap:14,capStr:"$14B",per:18.4,pbr:8.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"LII",n:"Lennox International",s:"산업재",cap:14,capStr:"$14B",per:18.4,pbr:6.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"IP",n:"International Paper",s:"소재",cap:14,capStr:"$14B",per:12.8,pbr:1.4,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"PKG",n:"Packaging Corp",s:"소재",cap:14,capStr:"$14B",per:14.8,pbr:3.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"NWS",n:"News Corp",s:"통신서비스",cap:14,capStr:"$14B",per:22.4,pbr:1.4,size:true,finance:true,earnings:true,dividend:false,growth:false},
+  {t:"ATO",n:"Atmos Energy",s:"유틸리티",cap:14,capStr:"$14B",per:16.8,pbr:2.2,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"FE",n:"FirstEnergy",s:"유틸리티",cap:14,capStr:"$14B",per:14.8,pbr:1.4,size:true,finance:false,earnings:true,dividend:false,growth:false},
+  {t:"EIX",n:"Edison International",s:"유틸리티",cap:14,capStr:"$14B",per:14.8,pbr:1.4,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"VTR",n:"Ventas",s:"부동산",cap:14,capStr:"$14B",per:28.4,pbr:1.8,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"ARE",n:"Alexandria Real Estate",s:"부동산",cap:14,capStr:"$14B",per:22.4,pbr:1.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"MAA",n:"Mid-America Apartment",s:"부동산",cap:14,capStr:"$14B",per:18.4,pbr:2.2,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"ESS",n:"Essex Property Trust",s:"부동산",cap:14,capStr:"$14B",per:18.4,pbr:2.4,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"SWKS",n:"Skyworks Solutions",s:"IT",cap:14,capStr:"$14B",per:9.8,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"ILMN",n:"Illumina",s:"헬스케어",cap:14,capStr:"$14B",per:48.4,pbr:3.8,size:true,finance:true,earnings:true,dividend:false,growth:false},
+  {t:"MOH",n:"Molina Healthcare",s:"헬스케어",cap:14,capStr:"$14B",per:9.8,pbr:3.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"FNF",n:"Fidelity National Financial",s:"금융",cap:14,capStr:"$14B",per:9.8,pbr:1.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"EG",n:"Everest Re Group",s:"금융",cap:14,capStr:"$14B",per:8.8,pbr:1.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"NWSA",n:"News Corp A",s:"금융",cap:14,capStr:"$14B",per:22.4,pbr:1.4,size:true,finance:true,earnings:true,dividend:false,growth:false},
+  {t:"CG",n:"Carlyle Group",s:"금융",cap:14,capStr:"$14B",per:12.4,pbr:2.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"POOL",n:"Pool Corp",s:"경기소비재",cap:14,capStr:"$14B",per:22.4,pbr:8.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"MAS",n:"Masco Corp",s:"산업재",cap:14,capStr:"$14B",per:14.8,pbr:999,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"WRK",n:"WestRock",s:"소재",cap:14,capStr:"$14B",per:9.8,pbr:1.2,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"BLL",n:"Ball Corp",s:"소재",cap:14,capStr:"$14B",per:18.4,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"AVY",n:"Avery Dennison",s:"소재",cap:14,capStr:"$14B",per:18.4,pbr:4.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"EPAM",n:"EPAM Systems",s:"IT",cap:12,capStr:"$12B",per:28.4,pbr:3.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"SIVB",n:"SVB Financial",s:"금융",cap:12,capStr:"$12B",per:11.4,pbr:1.2,size:true,finance:true,earnings:false,dividend:false,growth:false},
+  {t:"BEN",n:"Franklin Resources",s:"금융",cap:12,capStr:"$12B",per:9.2,pbr:1.0,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"BAX",n:"Baxter International",s:"헬스케어",cap:12,capStr:"$12B",per:18.4,pbr:1.4,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"UHS",n:"Universal Health Services",s:"헬스케어",cap:12,capStr:"$12B",per:12.8,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"PKI",n:"PerkinElmer",s:"헬스케어",cap:12,capStr:"$12B",per:18.4,pbr:2.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"CPB",n:"Campbell Soup",s:"필수소비재",cap:12,capStr:"$12B",per:12.8,pbr:3.8,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"SJM",n:"JM Smucker",s:"필수소비재",cap:12,capStr:"$12B",per:12.4,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"BG",n:"Bunge Global",s:"필수소비재",cap:12,capStr:"$12B",per:7.8,pbr:1.0,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"TAP",n:"Molson Coors",s:"필수소비재",cap:12,capStr:"$12B",per:10.4,pbr:1.2,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"KMX",n:"CarMax",s:"경기소비재",cap:12,capStr:"$12B",per:12.8,pbr:2.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"RL",n:"Ralph Lauren",s:"경기소비재",cap:12,capStr:"$12B",per:14.8,pbr:4.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"MGM",n:"MGM Resorts",s:"경기소비재",cap:12,capStr:"$12B",per:14.8,pbr:3.2,size:true,finance:false,earnings:false,dividend:false,growth:false},
+  {t:"SWK",n:"Stanley Black & Decker",s:"산업재",cap:12,capStr:"$12B",per:18.8,pbr:1.4,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"CHRW",n:"C.H. Robinson",s:"산업재",cap:12,capStr:"$12B",per:14.8,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"AIZ",n:"Assurant",s:"산업재",cap:12,capStr:"$12B",per:14.2,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"TXT",n:"Textron",s:"산업재",cap:12,capStr:"$12B",per:12.8,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"MRO",n:"Marathon Oil",s:"에너지",cap:12,capStr:"$12B",per:8.4,pbr:1.2,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"CF",n:"CF Industries",s:"소재",cap:12,capStr:"$12B",per:9.8,pbr:1.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"IFF",n:"International Flavors",s:"소재",cap:12,capStr:"$12B",per:22.4,pbr:1.2,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"LNT",n:"Alliant Energy",s:"유틸리티",cap:12,capStr:"$12B",per:16.4,pbr:1.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"NRG",n:"NRG Energy",s:"유틸리티",cap:12,capStr:"$12B",per:12.4,pbr:5.8,size:true,finance:false,earnings:true,dividend:false,growth:true},
+  {t:"KIM",n:"Kimco Realty",s:"부동산",cap:12,capStr:"$12B",per:14.8,pbr:1.2,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"UDR",n:"UDR Inc",s:"부동산",cap:12,capStr:"$12B",per:22.4,pbr:2.0,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"SUI",n:"Sun Communities",s:"부동산",cap:12,capStr:"$12B",per:22.4,pbr:1.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"CTXS",n:"Citrix Systems",s:"IT",cap:12,capStr:"$12B",per:14.8,pbr:5.8,size:true,finance:true,earnings:true,dividend:false,growth:false},
+  {t:"DOCU",n:"DocuSign",s:"IT",cap:12,capStr:"$12B",per:28.4,pbr:4.8,size:true,finance:true,earnings:false,dividend:false,growth:true},
+  {t:"OKTA",n:"Okta",s:"IT",cap:12,capStr:"$12B",per:188.4,pbr:4.8,size:true,finance:true,earnings:false,dividend:false,growth:false},
+  {t:"PODD",n:"Insulet",s:"헬스케어",cap:12,capStr:"$12B",per:58.4,pbr:8.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"RVTY",n:"Revvity",s:"헬스케어",cap:12,capStr:"$12B",per:18.4,pbr:2.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"HZNP",n:"Horizon Therapeutics",s:"헬스케어",cap:12,capStr:"$12B",per:28.4,pbr:4.8,size:true,finance:true,earnings:false,dividend:false,growth:true},
+  {t:"INCY",n:"Incyte",s:"헬스케어",cap:12,capStr:"$12B",per:14.8,pbr:2.8,size:true,finance:true,earnings:true,dividend:false,growth:false},
+  {t:"CCK",n:"Crown Holdings",s:"소재",cap:12,capStr:"$12B",per:12.4,pbr:4.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"AMCR",n:"Amcor",s:"소재",cap:12,capStr:"$12B",per:12.4,pbr:2.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"NDSN",n:"Nordson",s:"산업재",cap:12,capStr:"$12B",per:22.4,pbr:4.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"PEAK",n:"Healthpeak Properties",s:"부동산",cap:12,capStr:"$12B",per:18.4,pbr:1.4,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"AMH",n:"American Homes 4 Rent",s:"부동산",cap:12,capStr:"$12B",per:22.4,pbr:1.8,size:true,finance:false,earnings:true,dividend:false,growth:true},
+  {t:"LSI",n:"Life Storage",s:"부동산",cap:12,capStr:"$12B",per:22.4,pbr:2.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"REXR",n:"Rexford Industrial",s:"부동산",cap:12,capStr:"$12B",per:28.4,pbr:3.4,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"JNPR",n:"Juniper Networks",s:"IT",cap:11,capStr:"$11B",per:14.8,pbr:2.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"EXP",n:"Eagle Materials",s:"산업재",cap:10,capStr:"$10B",per:12.8,pbr:3.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"IPG",n:"Interpublic Group",s:"통신서비스",cap:10,capStr:"$10B",per:9.4,pbr:2.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"NI",n:"NiSource",s:"유틸리티",cap:10,capStr:"$10B",per:16.4,pbr:1.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"REG",n:"Regency Centers",s:"부동산",cap:10,capStr:"$10B",per:18.4,pbr:1.4,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"ELS",n:"Equity Lifestyle",s:"부동산",cap:10,capStr:"$10B",per:22.4,pbr:5.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"WPC",n:"W.P. Carey",s:"부동산",cap:10,capStr:"$10B",per:14.8,pbr:1.2,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"FFIV",n:"F5 Networks",s:"IT",cap:10,capStr:"$10B",per:14.8,pbr:4.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"NTRA",n:"Natera",s:"헬스케어",cap:10,capStr:"$10B",per:188.4,pbr:14.4,size:true,finance:true,earnings:false,dividend:false,growth:true},
+  {t:"GL",n:"Globe Life",s:"금융",cap:10,capStr:"$10B",per:9.8,pbr:1.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"ALLE",n:"Allegion",s:"산업재",cap:10,capStr:"$10B",per:18.4,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"EME",n:"EMCOR Group",s:"산업재",cap:10,capStr:"$10B",per:14.8,pbr:3.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"CPT",n:"Camden Property Trust",s:"부동산",cap:9,capStr:"$9B",per:18.4,pbr:2.2,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"PAYC",n:"Paycom Software",s:"IT",cap:9,capStr:"$9B",per:22.4,pbr:8.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"SEIC",n:"SEI Investments",s:"금융",cap:9,capStr:"$9B",per:18.4,pbr:3.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"CUBE",n:"CubeSmart",s:"부동산",cap:9,capStr:"$9B",per:22.4,pbr:2.4,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"LNC",n:"Lincoln National",s:"금융",cap:8,capStr:"$8B",per:8.4,pbr:0.5,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"TPR",n:"Tapestry",s:"경기소비재",cap:8,capStr:"$8B",per:12.4,pbr:3.8,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"WYNN",n:"Wynn Resorts",s:"경기소비재",cap:8,capStr:"$8B",per:22.4,pbr:14.2,size:true,finance:false,earnings:false,dividend:false,growth:false},
+  {t:"HII",n:"Huntington Ingalls",s:"산업재",cap:8,capStr:"$8B",per:12.4,pbr:2.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"APA",n:"APA Corp",s:"에너지",cap:8,capStr:"$8B",per:6.4,pbr:0.9,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"X",n:"U.S. Steel",s:"소재",cap:8,capStr:"$8B",per:8.4,pbr:0.9,size:true,finance:true,earnings:true,dividend:false,growth:false},
+  {t:"ALB",n:"Albemarle",s:"소재",cap:8,capStr:"$8B",per:14.8,pbr:1.2,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"MOS",n:"Mosaic",s:"소재",cap:8,capStr:"$8B",per:9.8,pbr:0.9,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"EMN",n:"Eastman Chemical",s:"소재",cap:8,capStr:"$8B",per:9.8,pbr:1.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"PARA",n:"Paramount Global",s:"통신서비스",cap:8,capStr:"$8B",per:14.8,pbr:0.8,size:true,finance:false,earnings:false,dividend:false,growth:false},
+  {t:"NNN",n:"National Retail Properties",s:"부동산",cap:8,capStr:"$8B",per:12.8,pbr:1.2,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"BXP",n:"Boston Properties",s:"부동산",cap:8,capStr:"$8B",per:18.4,pbr:0.8,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"FRT",n:"Federal Realty",s:"부동산",cap:8,capStr:"$8B",per:22.4,pbr:2.4,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"QRVO",n:"Qorvo",s:"IT",cap:8,capStr:"$8B",per:12.4,pbr:2.2,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"PATH",n:"UiPath",s:"IT",cap:8,capStr:"$8B",per:52.4,pbr:3.8,size:true,finance:true,earnings:false,dividend:false,growth:false},
+  {t:"TECH",n:"Bio-Techne",s:"헬스케어",cap:8,capStr:"$8B",per:28.4,pbr:4.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"CRL",n:"Charles River Labs",s:"헬스케어",cap:8,capStr:"$8B",per:14.8,pbr:2.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"OHI",n:"Omega Healthcare",s:"헬스케어",cap:8,capStr:"$8B",per:12.4,pbr:1.4,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"EXAS",n:"Exact Sciences",s:"헬스케어",cap:8,capStr:"$8B",per:188.4,pbr:4.8,size:true,finance:true,earnings:false,dividend:false,growth:false},
+  {t:"JEF",n:"Jefferies Financial",s:"금융",cap:8,capStr:"$8B",per:10.4,pbr:0.9,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"WSO",n:"Watsco",s:"경기소비재",cap:8,capStr:"$8B",per:22.4,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"SKX",n:"Skechers",s:"경기소비재",cap:8,capStr:"$8B",per:12.4,pbr:2.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"AOS",n:"A.O. Smith",s:"산업재",cap:8,capStr:"$8B",per:18.4,pbr:3.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"FBHS",n:"Fortune Brands",s:"산업재",cap:8,capStr:"$8B",per:14.8,pbr:2.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"MTZ",n:"MasTec",s:"산업재",cap:8,capStr:"$8B",per:18.4,pbr:2.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"EGP",n:"EastGroup Properties",s:"부동산",cap:8,capStr:"$8B",per:24.8,pbr:3.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"IVZ",n:"Invesco",s:"금융",cap:7,capStr:"$7B",per:8.8,pbr:1.0,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"PVH",n:"PVH Corp",s:"경기소비재",cap:7,capStr:"$7B",per:8.4,pbr:0.8,size:true,finance:true,earnings:true,dividend:false,growth:false},
+  {t:"PCTY",n:"Paylocity",s:"IT",cap:7,capStr:"$7B",per:28.4,pbr:5.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"JAZZ",n:"Jazz Pharmaceuticals",s:"헬스케어",cap:7,capStr:"$7B",per:9.8,pbr:1.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"UNM",n:"Unum Group",s:"금융",cap:7,capStr:"$7B",per:7.8,pbr:0.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"SF",n:"Stifel Financial",s:"금융",cap:7,capStr:"$7B",per:12.4,pbr:1.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"HAS",n:"Hasbro",s:"경기소비재",cap:7,capStr:"$7B",per:18.4,pbr:2.4,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"MHK",n:"Mohawk Industries",s:"경기소비재",cap:7,capStr:"$7B",per:9.8,pbr:0.8,size:true,finance:true,earnings:true,dividend:false,growth:false},
+  {t:"BWA",n:"BorgWarner",s:"산업재",cap:7,capStr:"$7B",per:9.8,pbr:1.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"RHI",n:"Robert Half",s:"산업재",cap:6,capStr:"$6B",per:12.4,pbr:2.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"VOYA",n:"Voya Financial",s:"금융",cap:6,capStr:"$6B",per:9.4,pbr:0.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"MAT",n:"Mattel",s:"경기소비재",cap:6,capStr:"$6B",per:12.4,pbr:2.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"TREX",n:"Trex Company",s:"산업재",cap:6,capStr:"$6B",per:28.4,pbr:8.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"DOC",n:"Physicians Realty",s:"부동산",cap:6,capStr:"$6B",per:22.4,pbr:1.2,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"HR",n:"Healthcare Realty",s:"부동산",cap:6,capStr:"$6B",per:22.4,pbr:1.2,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"FR",n:"First Industrial",s:"부동산",cap:6,capStr:"$6B",per:22.4,pbr:2.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"CLF",n:"Cleveland-Cliffs",s:"소재",cap:5,capStr:"$5B",per:6.4,pbr:0.8,size:true,finance:true,earnings:true,dividend:false,growth:false},
+  {t:"SON",n:"Sonoco Products",s:"소재",cap:5,capStr:"$5B",per:12.4,pbr:2.4,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"CE",n:"Celanese",s:"소재",cap:5,capStr:"$5B",per:7.8,pbr:0.8,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"FMC",n:"FMC Corp",s:"소재",cap:5,capStr:"$5B",per:12.4,pbr:1.4,size:true,finance:true,earnings:true,dividend:true,growth:false},
+  {t:"CTLT",n:"Catalent",s:"헬스케어",cap:5,capStr:"$5B",per:28.4,pbr:2.4,size:true,finance:true,earnings:true,dividend:false,growth:false},
+  {t:"SEE",n:"Sealed Air",s:"소재",cap:5,capStr:"$5B",per:12.4,pbr:999,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"GXO",n:"GXO Logistics",s:"산업재",cap:5,capStr:"$5B",per:18.4,pbr:2.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"LSTR",n:"Landstar System",s:"산업재",cap:5,capStr:"$5B",per:14.8,pbr:5.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"R",n:"Ryder System",s:"산업재",cap:5,capStr:"$5B",per:9.8,pbr:1.2,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"AL",n:"Air Lease",s:"산업재",cap:5,capStr:"$5B",per:7.8,pbr:0.9,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"KNX",n:"Knight-Swift",s:"산업재",cap:5,capStr:"$5B",per:12.4,pbr:1.2,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"MTDR",n:"Matador Resources",s:"에너지",cap:5,capStr:"$5B",per:7.8,pbr:1.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"COLD",n:"Americold Realty",s:"부동산",cap:5,capStr:"$5B",per:42.4,pbr:1.8,size:true,finance:false,earnings:true,dividend:false,growth:false},
+  {t:"VFC",n:"VF Corp",s:"경기소비재",cap:4,capStr:"$4B",per:12.4,pbr:1.4,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"OGE",n:"OGE Energy",s:"유틸리티",cap:4,capStr:"$4B",per:14.8,pbr:1.4,size:true,finance:false,earnings:true,dividend:true,growth:true},
+  {t:"GNRC",n:"Generac Holdings",s:"경기소비재",cap:4,capStr:"$4B",per:18.4,pbr:3.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"WHR",n:"Whirlpool",s:"경기소비재",cap:4,capStr:"$4B",per:9.8,pbr:0.8,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"GATX",n:"GATX Corp",s:"산업재",cap:4,capStr:"$4B",per:12.4,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"TKR",n:"Timken",s:"산업재",cap:4,capStr:"$4B",per:12.4,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"HXL",n:"Hexcel",s:"산업재",cap:4,capStr:"$4B",per:22.4,pbr:3.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"ATI",n:"ATI Inc",s:"소재",cap:4,capStr:"$4B",per:12.4,pbr:2.4,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"CRS",n:"Carpenter Technology",s:"소재",cap:4,capStr:"$4B",per:14.8,pbr:2.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"TDC",n:"Teradata",s:"IT",cap:3,capStr:"$3B",per:14.8,pbr:4.8,size:true,finance:true,earnings:true,dividend:false,growth:false},
+  {t:"PRGO",n:"Perrigo",s:"헬스케어",cap:3,capStr:"$3B",per:12.4,pbr:0.8,size:true,finance:true,earnings:true,dividend:false,growth:false},
+  {t:"LEG",n:"Leggett & Platt",s:"경기소비재",cap:3,capStr:"$3B",per:9.8,pbr:1.4,size:true,finance:false,earnings:true,dividend:true,growth:false},
+  {t:"OI",n:"O-I Glass",s:"소재",cap:3,capStr:"$3B",per:9.8,pbr:1.4,size:true,finance:false,earnings:true,dividend:false,growth:false},
+  {t:"HUBG",n:"Hub Group",s:"산업재",cap:3,capStr:"$3B",per:12.4,pbr:1.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"WERN",n:"Werner Enterprises",s:"산업재",cap:3,capStr:"$3B",per:9.8,pbr:1.4,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"AAON",n:"AAON Inc",s:"산업재",cap:3,capStr:"$3B",per:22.4,pbr:4.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"PRIM",n:"Primoris Services",s:"산업재",cap:3,capStr:"$3B",per:12.4,pbr:1.8,size:true,finance:true,earnings:true,dividend:false,growth:true},
+  {t:"PBF",n:"PBF Energy",s:"에너지",cap:3,capStr:"$3B",per:4.8,pbr:0.6,size:true,finance:true,earnings:true,dividend:false,growth:false},
+  {t:"SM",n:"SM Energy",s:"에너지",cap:3,capStr:"$3B",per:7.8,pbr:1.2,size:true,finance:true,earnings:true,dividend:false,growth:false},
+  {t:"NSA",n:"National Storage",s:"부동산",cap:3,capStr:"$3B",per:18.4,pbr:1.8,size:true,finance:false,earnings:true,dividend:false,growth:true},
+  {t:"LUMN",n:"Lumen Technologies",s:"통신서비스",cap:2,capStr:"$2B",per:999,pbr:999,size:true,finance:false,earnings:false,dividend:false,growth:false},
+  {t:"SWI",n:"Sonos",s:"경기소비재",cap:2,capStr:"$2B",per:18.4,pbr:2.8,size:true,finance:true,earnings:false,dividend:false,growth:false},
+  {t:"APOG",n:"Apogee Enterprises",s:"산업재",cap:2,capStr:"$2B",per:12.4,pbr:1.8,size:true,finance:true,earnings:true,dividend:true,growth:true},
+  {t:"CRC",n:"California Resources",s:"에너지",cap:2,capStr:"$2B",per:8.4,pbr:1.2,size:true,finance:true,earnings:true,dividend:false,growth:false},
+  {t:"GTY",n:"Getty Realty",s:"부동산",cap:2,capStr:"$2B",per:18.4,pbr:1.8,size:true,finance:false,earnings:true,dividend:true,growth:true},
+];
+
+const CRITERIA = [
+  {id:'size',num:'①',name:'충분한 기업 규모',desc:'시총 $2B+ / 매출 $700M+'},
+  {id:'finance',num:'②',name:'건전한 재무 상태',desc:'유동비율 ≥ 2:1'},
+  {id:'earnings',num:'③',name:'이익의 안정성',desc:'10년 연속 흑자'},
+  {id:'dividend',num:'④',name:'배당의 지속성',desc:'20년 이상 배당'},
+  {id:'growth',num:'⑤',name:'이익의 성장성',desc:'EPS 10년 33% 성장'},
+  {id:'per',num:'⑥',name:'적정 PER',desc:'PER ≤ 15'},
+  {id:'pbr',num:'⑦',name:'적정 PBR',desc:'PBR≤1.5 or P×B≤22.5'},
+];
+
+let active = {size:true,finance:true,earnings:true,dividend:true,growth:true,per:true,pbr:true};
+let sortKey = 'cap';
+let sortAsc = false;
+let currentData = [];
+
+let criteriaMode = 'classic';
+const MODES = {
+  classic: { perMax: 15,  pbrMax: 1.5,  product: 22.5, label: 'PER≤15 · PBR≤1.5 · P×B≤22.5' },
+  modern:  { perMax: 20,  pbrMax: 3.0,  product: 50,   label: 'PER≤20 · PBR≤3.0 · P×B≤50' },
+};
+function pbr_pass(d){
+  const m = MODES[criteriaMode];
+  return d.pbr !== 999 && (d.pbr <= m.pbrMax || (d.per !== 999 && d.per * d.pbr <= m.product));
+}
+function per_pass(d){
+  return d.per !== 999 && d.per <= MODES[criteriaMode].perMax;
+}
+function setMode(mode){
+  criteriaMode = mode;
+  document.getElementById('btn-classic').className = 'mode-btn' + (mode==='classic' ? ' active-classic' : '');
+  document.getElementById('btn-modern').className  = 'mode-btn' + (mode==='modern'  ? ' active-modern'  : '');
+  document.getElementById('mode-info').textContent = MODES[mode].label;
+  // Update filter card descriptions
+  const descs = document.querySelectorAll('.fc-desc');
+  if(descs.length >= 6) descs[5].textContent = 'PER ≤ ' + MODES[mode].perMax;
+  if(descs.length >= 7) descs[6].textContent = 'PBR≤' + MODES[mode].pbrMax + ' or P×B≤' + MODES[mode].product;
+    const lbl = document.getElementById('mode-note-label');
+  if(lbl) lbl.textContent = mode==='classic' ? '클래식 기준' : '현대적 기준';
+  if(lbl) lbl.style.color = mode==='classic' ? '#5b9bd5' : '#4caf82';
+    const cl = document.getElementById('criteria-legend');
+  if(cl) cl.textContent = (mode==='classic'?'클래식':'현대적') + ': ' + MODES[mode].label + ' | 2024년 연간 추정치 기준';
+  renderTable();
+}
+
+function passes(d){
+  const map = {size:d.size, finance:d.finance, earnings:d.earnings, dividend:d.dividend, growth:d.growth, per:per_pass(d), pbr:pbr_pass(d)};
+  return CRITERIA.every(c => !active[c.id] || map[c.id]);
+}
+
+function scoreOf(d){
+  let n = 0;
+  if(d.size) n++;
+  if(d.finance) n++;
+  if(d.earnings) n++;
+  if(d.dividend) n++;
+  if(d.growth) n++;
+  if(per_pass(d)) n++;
+  if(pbr_pass(d)) n++;
+  return n;
+}
+
+function renderFilters(){
+  document.getElementById('filters').innerHTML = CRITERIA.map(c=>`
+    <div class="fc ${active[c.id]?'on':'off'}" onclick="toggle('${c.id}')">
+      <div class="fc-head"><span class="fc-badge">${c.num}</span><div class="sw ${active[c.id]?'on':''}"></div></div>
+      <div class="fc-name">${c.name}</div>
+      <div class="fc-desc">${c.desc}</div>
+    </div>
+  `).join('');
+}
+
+function toggle(id){ active[id]=!active[id]; renderFilters(); renderTable(); }
+function allOn(){ CRITERIA.forEach(c=>active[c.id]=true); renderFilters(); renderTable(); }
+function allOff(){ CRITERIA.forEach(c=>active[c.id]=false); renderFilters(); renderTable(); }
+function resetAll(){ allOn(); document.getElementById('search').value=''; document.getElementById('sector-filter').value=''; document.getElementById('show-mode').value='all'; }
+
+function sortBy(k){
+  if(sortKey===k) sortAsc=!sortAsc;
+  else { sortKey=k; sortAsc = k==='t'||k==='n'||k==='s'; }
+  document.querySelectorAll('thead th').forEach(th=>th.classList.remove('sorted'));
+  renderTable();
+}
+
+function cellVal(d, id){
+  const map = {size:d.size, finance:d.finance, earnings:d.earnings, dividend:d.dividend, growth:d.growth, per:per_pass(d), pbr:pbr_pass(d)};
+  const v = map[id];
+  if(!active[id]) return '<span class="cell-na">—</span>';
+  return v ? '<span class="cell-pass">✓</span>' : '<span class="cell-fail">✗</span>';
+}
+
+function dots(d){
+  return '<div class="dots">' + CRITERIA.map(c=>{
+    const map={size:d.size,finance:d.finance,earnings:d.earnings,dividend:d.dividend,growth:d.growth,per:per_pass(d),pbr:pbr_pass(d)};
+    let cls = active[c.id] ? (map[c.id]?'d-pass':'d-fail') : 'd-off';
+    return `<div class="dot ${cls}"></div>`;
+  }).join('') + '</div>';
+}
+
+function numClass(d, id){
+  if(!active[id]) return 'num-na';
+  const map={per:per_pass(d),pbr:pbr_pass(d)};
+  return map[id] ? 'num-pass' : 'num-fail';
+}
+
+function fmtPer(v){ return v===999 ? '<span class="cell-na">N/A</span>' : v.toFixed(1); }
+function fmtPbr(v){ return v===999 ? '<span class="cell-na">—</span>' : v.toFixed(2); }
+
+function populateSectors(){
+  const sel = document.getElementById('sector-filter');
+  const sectors = [...new Set(STOCKS.map(d=>d.s))].sort();
+  sectors.forEach(s=>{
+    const o = document.createElement('option');
+    o.value = s; o.textContent = s;
+    sel.appendChild(o);
+  });
+}
+
+function renderTable(){
+  const q = document.getElementById('search').value.toLowerCase();
+  const sec = document.getElementById('sector-filter').value;
+  const mode = document.getElementById('show-mode').value;
+
+  let data = STOCKS.filter(d=>{
+    if(q && !d.t.toLowerCase().includes(q) && !d.n.toLowerCase().includes(q)) return false;
+    if(sec && d.s !== sec) return false;
+    const p = passes(d);
+    if(mode==='pass' && !p) return false;
+    if(mode==='fail' && p) return false;
+    return true;
+  });
+
+  data.sort((a,b)=>{
+    let av, bv;
+    if(sortKey==='t') { av=a.t; bv=b.t; }
+    else if(sortKey==='n') { av=a.n; bv=b.n; }
+    else if(sortKey==='s') { av=a.s; bv=b.s; }
+    else if(sortKey==='cap') { av=a.cap; bv=b.cap; }
+    else if(sortKey==='per') { av=a.per; bv=b.per; }
+    else if(sortKey==='pbr') { av=a.pbr; bv=b.pbr; }
+    else { av=a[sortKey]; bv=b[sortKey]; }
+    if(av<bv) return sortAsc?-1:1;
+    if(av>bv) return sortAsc?1:-1;
+    return 0;
+  });
+
+  currentData = data;
+
+  const allFiltered = STOCKS.filter(d=>{
+    if(q && !d.t.toLowerCase().includes(q) && !d.n.toLowerCase().includes(q)) return false;
+    if(sec && d.s !== sec) return false;
+    return true;
+  });
+  const passCount = allFiltered.filter(d=>passes(d)).length;
+
+  document.getElementById('s-total').textContent = STOCKS.length;
+  document.getElementById('s-pass').textContent = passCount;
+  document.getElementById('s-rate').textContent = allFiltered.length > 0 ? (passCount/allFiltered.length*100).toFixed(0)+'%' : '0%';
+  document.getElementById('s-active').textContent = CRITERIA.filter(c=>active[c.id]).length + '/7';
+  document.getElementById('s-showing').textContent = data.length;
+  document.getElementById('count-info').textContent = `${data.length}개 표시 중`;
+
+  const tbody = document.getElementById('tbody');
+  const empty = document.getElementById('empty');
+
+  if(data.length === 0){ tbody.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+
+  tbody.innerHTML = data.map((d,i) => {
+    const p = passes(d);
+    const score = scoreOf(d);
+    const badge = p ? '<span class="pass-badge">통과</span>' : '<span class="fail-badge">탈락</span>';
+    const rowCls = p ? 'all-pass' : '';
+    const perCls = numClass(d,'per');
+    const pbrCls = numClass(d,'pbr');
+    return `<tr class="${rowCls}">
+      <td style="color:#4a4d5a;font-size:11px">${i+1}</td>
+      <td class="ticker">${d.t}</td>
+      <td class="name" title="${d.n}">${d.n}</td>
+      <td class="sector">${d.s}</td>
+      <td class="cap-v">${d.capStr}</td>
+      <td>${badge}</td>
+      <td>${dots(d)}<span style="font-size:10px;color:#8b9ab5;margin-left:4px">${score}/7</span></td>
+      <td class="${perCls}">${fmtPer(d.per)}</td>
+      <td class="${pbrCls}">${fmtPbr(d.pbr)}</td>
+      ${CRITERIA.map(c=>cellVal(d,c.id)).map(v=>`<td>${v}</td>`).join('')}
+    </tr>`;
+  }).join('');
+}
+
+function exportCSV(){
+  const header = ['#','티커','기업명','섹터','시가총액(B)','통과여부','점수','PER','PBR','①규모','②재무','③이익','④배당','⑤성장','⑥PER','⑦PBR'];
+  const rows = currentData.map((d,i)=>{
+    const p = passes(d);
+    const score = scoreOf(d);
+    const map={size:d.size,finance:d.finance,earnings:d.earnings,dividend:d.dividend,growth:d.growth,per:per_pass(d),pbr:pbr_pass(d)};
+    return [i+1, d.t, d.n, d.s, d.cap, p?'통과':'탈락', score+'/7', d.per===999?'N/A':d.per, d.pbr===999?'N/A':d.pbr,
+      ...CRITERIA.map(c=>active[c.id]?(map[c.id]?'O':'X'):'—')].join(',');
+  });
+  const csv = '\uFEFF' + [header.join(','), ...rows].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download = 'graham_screener_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+}
+
+document.getElementById('search').addEventListener('input', renderTable);
+populateSectors();
+renderFilters();
+renderTable();
+</script>
+</body>
+</html>
